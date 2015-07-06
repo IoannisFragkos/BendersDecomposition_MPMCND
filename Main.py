@@ -65,6 +65,23 @@ def populate_master(data, duals):
         master.addConstr(lhs=lhs, rhs=1., sense=GRB.LESS_EQUAL,
                          name='arc{}'.format(arc))
 
+        # Add Origin - Destination Cuts for each Commodity
+        for commodity in xrange(data.commodities):
+            arc_origin = data.origins[commodity]
+            arc_destination = data.destinations[commodity]
+            out_origin = get_2d_index(data.arcs, data.nodes)[0]-1 == arc_origin
+            in_destination = get_2d_index(
+                data.arcs, data.nodes)[1]-1 == arc_destination
+            for period in periods:
+                master.addConstr(
+                    lhs=quicksum(variables[period, in_destination]), rhs=1.,
+                    sense=GRB.GREATER_EQUAL,
+                    name='destinations_p{}c{}'.format(period, commodity))
+                master.addConstr(
+                    lhs=quicksum(variables[period, out_origin]), rhs=1.,
+                    sense=GRB.GREATER_EQUAL, name='origins_p{}_c{}'.format(
+                        period, commodity))
+
     # If an array of initial dual vectors is given, add them as cuts:
     # sum{t in T, (i,j) in A} [y{ijt} * cap{ij} *
     # sum{l=t to |T|} capacity_duals{ijl}] - flow_cost <=
@@ -491,7 +508,7 @@ def populate_benders_cut(duals, variables, data):
     :return:            rhs (double), lhs (Gurobi linear expression)
     """
     nodes, commodities, periods, arcs = data.nodes, data.commodities, \
-    data.periods, data.arcs.size
+                                        data.periods, data.arcs.size
     flow_duals = duals.flow_duals.reshape(nodes, commodities, periods)
     ubound_duals = duals.bounds_duals.reshape(arcs, commodities, periods)
     capacity_duals = duals.capacity_duals.reshape(data.periods, data.arcs.size)
