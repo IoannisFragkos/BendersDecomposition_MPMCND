@@ -150,7 +150,7 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
     # Populate all variables in one loop, keep track of their indexes
     count = 0
     for arc in arcs:
-        obj = - open_arcs[1, arc] * data.capacity[arc]
+        obj = - open_arcs[0, arc] * data.capacity[arc]
         capacity_duals[arc] = dual_subproblem.addVar(
             obj=obj, name='capacity_dual_a{}'.format(arc))
         capacity_index[arc] = count
