@@ -23,7 +23,7 @@ Subproblem_Duals = namedtuple('Subproblem_Duals', 'flow_duals capacity_duals '
 
 
 def main():
-    filename = 'R_single_period/r01.2.dow' if len(argv) <= 1 else argv[1]
+    filename = 'R_single_period/r01.1.dow' if len(argv) <= 1 else argv[1]
     data = read_data(filename)
     start = time()
     data.graph = make_graph(data)
@@ -74,11 +74,11 @@ def populate_master(data, duals):
                 data.arcs, data.nodes)[1]-1 == arc_destination
             for period in periods:
                 master.addConstr(
-                    lhs=quicksum(variables[period, in_destination]), rhs=1.,
+                    lhs=np.sum(variables[:period+1, in_destination]), rhs=1.,
                     sense=GRB.GREATER_EQUAL,
                     name='destinations_p{}c{}'.format(period, commodity))
                 master.addConstr(
-                    lhs=quicksum(variables[period, out_origin]), rhs=1.,
+                    lhs=np.sum(variables[:period+1, out_origin]), rhs=1.,
                     sense=GRB.GREATER_EQUAL, name='origins_p{}_c{}'.format(
                         period, commodity))
 
