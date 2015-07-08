@@ -97,7 +97,8 @@ def populate_master(data, duals):
                              name='heuristic_{}'.format(count))
 
     master.params.LazyConstraints = 1
-    master.setParam('Presolve', 0)
+    # Find feasible solutions quickly, works better
+    master.params.MIPFocus = 1
     master.update()
     # Store the variables inside the model, we cannot access them later!
     master._variables = master.getVars()
@@ -336,9 +337,37 @@ def callback_data(subproblems, data):
                                                period, data)
                     model.cbLazy(lhs=lhs, rhs=0., sense=GRB.LESS_EQUAL)
                 else:
-                    print 'Error Gurobi status - subproblem not optimal'
-                    raise RuntimeWarning('Subproblem returned unknown status')
-
+                    raise RuntimeWarning('Subproblem unknown status')
+        elif where == GRB.callback.MIPNODE:
+            node_count = int(model.cbGet(GRB.callback.MIPNODE_NODCNT))
+            if (node_count % 1000 == 0 or node_count < 10) and model.cbGet(
+                    GRB.callback.MIPNODE_STATUS) == GRB.OPTIMAL:
+                master_variables = model._variables
+                variables = model.cbGetNodeRel(model._variables)
+                flow_cost = variables[-data.periods:]
+                variables = np.array(variables[:-data.periods]).reshape(
+                    data.periods, data.arcs.size)
+                subproblem_status_arr, duals_arr = solve_dual_subproblem(
+                    flow_cost=flow_cost, open_arcs=variables)
+                for period in xrange(data.periods):
+                    subproblem_status = subproblem_status_arr[period]
+                    duals = duals_arr[period]
+                    if subproblem_status == GRB.status.OPTIMAL:
+                        if LOG_LEVEL:
+                            if duals.optimality_dual > 10e-7:
+                                print 'optimality cut, Period: {}'.format(
+                                    period+1)
+                            else:
+                                print 'feasibility cut, Period: {}'.format(
+                                    period+1)
+                        lhs = populate_benders_cut(duals, master_variables,
+                                                   period, data)
+                        if node_count < 10:
+                            model.cbCut(lhs=lhs, rhs=0., sense=GRB.LESS_EQUAL)
+                        else:
+                            model.cbLazy(lhs=lhs, rhs=0., sense=GRB.LESS_EQUAL)
+                    else:
+                        raise RuntimeWarning('Subproblem unknown status')
     return master_callback
 
 
