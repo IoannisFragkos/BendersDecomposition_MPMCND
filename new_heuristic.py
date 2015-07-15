@@ -346,7 +346,18 @@ def make_local_branching_model(data, kappa, open_arcs):
                     # print 'Period: {} Arc: {}'.format(period, arc)
         print ''
 
-    return model.ObjVal, solutions
+    return model.ObjVal, solutions[0]
+
+
+def heuristic(data, kappa):
+    time_start = time.time()
+    objective, open_arcs = heuristic_main(data)
+    print 'objective before Local Branching: {}'.format(objective)
+    print 'time before Local Branching: {}'.format(time.time() - time_start)
+    objective, open_arcs = make_local_branching_model(data, kappa, open_arcs)
+    print 'objective after Local Branching: {}'.format(objective)
+    print 'time after Local Branching: {}'.format(time.time() - time_start)
+    return objective, open_arcs
 
 
 def test():
