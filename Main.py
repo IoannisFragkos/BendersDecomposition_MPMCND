@@ -4,9 +4,10 @@ from helpers import read_data, get_2d_index
 from sys import argv
 from time import time
 from itertools import product
-from gurobipy import Model, GRB, quicksum, LinExpr, GurobiError
+from gurobipy import Model, GRB, LinExpr
 from graph_helpers import make_graph
 from collections import namedtuple
+from new_heuristic import heuristic_main
 import numpy as np
 
 __author__ = 'ioannis'
@@ -24,12 +25,15 @@ LOG_LEVEL = 0
 
 
 def main():
-    filename = 'R_single_period/r01.1_R_H_10.dow' if len(argv) <= 1 else argv[1]
+    filename = 'R_single_period/r01.1_R_H_10.dow' if len(argv) <= 1 \
+        else argv[1]
     data = read_data(filename)
     start = time()
     data.graph = make_graph(data)
     master = populate_master(data, None)
-    subproblems = populate_dual_subproblem(data, None)
+    objective, open_arcs = heuristic_main(data)
+    print 'Heuristic objective value: {}'.format(objective)
+    subproblems = populate_dual_subproblem(data, open_arcs)
     master_callback = callback_data(subproblems, data)
     master.optimize(master_callback)
     stop = time()
@@ -102,6 +106,8 @@ def populate_master(data, duals):
     master.update()
     # Store the variables inside the model, we cannot access them later!
     master._variables = master.getVars()
+    # Indicate that we inject the feasible solution to the subproblem intially
+    master._use_feasible = True
     return master
 
 
@@ -125,8 +131,8 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
     dual_subproblem = Model('dual_subproblem_0')
 
     # Ranges we are going to need
-    arcs, periods, commodities, nodes = xrange(data.arcs.size), xrange(
-        data.periods), xrange(data.commodities), xrange(data.nodes)
+    arcs, periods, commodities = xrange(data.arcs.size), xrange(
+        data.periods), xrange(data.commodities)
 
     # We use arrays to store variable indexes and variable objects. Why use
     # both? Gurobi wont let us get the values of individual variables
@@ -257,14 +263,12 @@ def callback_data(subproblems, data):
         flow_index = subproblems[0]._flow_index
         ubound_index = subproblems[0]._ubounds_index
 
-        if flow_cost is None:
-            flow_cost = np.zeros(shape=data.periods, dtype=float)
-        # We need to initialize this array here, because it is cumulative
-        # capacity_duals_vals = np.zeros(shape=data.arcs.size, dtype=float)
-
         # Return arrays
         status_arr = np.zeros(shape=data.periods, dtype=int)
         duals_arr = np.empty(shape=data.periods, dtype=object)
+
+        if flow_cost is None:
+            flow_cost = np.zeros(shape=data.periods, dtype=float)
 
         # We loop backwards because for capacity duals we need to store their
         #  sum from each period to the last period
@@ -277,11 +281,12 @@ def callback_data(subproblems, data):
             flow_duals = np.take(all_variables, flow_index)
             ubound_duals = np.take(all_variables, ubound_index)
 
-            for arc in arcs:
-                var = capacity_duals[arc]
-                cap = data.capacity[arc]
-                coeff = -cap * np.sum(open_arcs[:period+1, arc])
-                var.setAttr('Obj', coeff)
+            if open_arcs is not None:
+                for arc in arcs:
+                    var = capacity_duals[arc]
+                    cap = data.capacity[arc]
+                    coeff = -cap * np.sum(open_arcs[:period+1, arc])
+                    var.setAttr('Obj', coeff)
 
             optimality_var.setAttr('Obj', -flow_cost[period])
 
@@ -320,6 +325,9 @@ def callback_data(subproblems, data):
             flow_cost = variables[-data.periods:]
             variables = np.array(variables[:-data.periods]).reshape(
                 data.periods, data.arcs.size)
+            if model._use_feasible:
+                variables = None
+                model._use_feasible = False
             subproblem_status_arr, duals_arr = solve_dual_subproblem(
                 flow_cost=flow_cost, open_arcs=variables)
             for period in xrange(data.periods):
