@@ -7,7 +7,7 @@ from itertools import product
 from gurobipy import Model, GRB, LinExpr
 from graph_helpers import make_graph
 from collections import namedtuple
-from new_heuristic import heuristic_main
+from new_heuristic import heuristic
 import numpy as np
 
 __author__ = 'ioannis'
@@ -30,7 +30,7 @@ def main():
     data = read_data(filename)
     start = time()
     data.graph = make_graph(data)
-    objective, open_arcs = heuristic_main(data)
+    objective, open_arcs = heuristic(data, 2)
     print 'Heuristic objective value: {}'.format(objective)
     subproblems = populate_dual_subproblem(data, open_arcs)
     master = populate_master(data, None)

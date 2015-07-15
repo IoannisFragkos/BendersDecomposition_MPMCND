@@ -275,6 +275,7 @@ def make_local_branching_model(data, kappa, open_arcs):
             arc_open[period, arc] = model.addVar(
                 vtype=grb.GRB.BINARY, obj=fixed_cost[period, arc],
                 name='open_arc{}-{}_{}'.format(i, j, period))
+            arc_open[period, arc].start = open_arcs[period, arc]
             for h in xrange(commodities):
                 flow[period, h, arc] = model.addVar(
                     obj=variable_cost[arc]*demand[period, h],
