@@ -40,12 +40,13 @@ def main():
     print 'Total time: {} seconds'.format(round(stop - start, 0))
 
 
-def populate_master(data, duals):
+def populate_master(data, duals, open_arcs=None):
     """
     Function that populates the Benders Master problem
     :param duals:  Array of dual values used to initialize the master
                    constraints. If not provided, we set it to zero. If
                    provided, we assume it is optimality cuts (why?)
+    :param open_arcs: If given, it is a MIP start feasible solution
     :rtype:        Gurobi model object
     """
     master = Model('master-model')
@@ -99,6 +100,10 @@ def populate_master(data, duals):
             rhs, lhs = populate_benders_cut(duals, variables, data)
             master.addConstr(lhs=lhs, rhs=rhs, sense=GRB.LESS_EQUAL,
                              name='heuristic_{}'.format(count))
+    if open_arcs is not None:
+        for arc in arcs:
+            for period in periods:
+                variables[period, arc].start = open_arcs[period, arc]
 
     master.params.LazyConstraints = 1
     # Find feasible solutions quickly, works better
