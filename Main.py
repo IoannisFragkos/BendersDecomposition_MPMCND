@@ -33,7 +33,7 @@ def main():
     objective, open_arcs = heuristic(data, 2)
     print 'Heuristic objective value: {}'.format(objective)
     subproblems = populate_dual_subproblem(data, open_arcs)
-    master = populate_master(data, None)
+    master = populate_master(data, None, open_arcs=open_arcs)
     master_callback = callback_data(subproblems, data)
     master.optimize(master_callback)
     stop = time()
@@ -108,10 +108,11 @@ def populate_master(data, duals, open_arcs=None):
     master.params.LazyConstraints = 1
     # Find feasible solutions quickly, works better
     master.params.MIPFocus = 1
+    master.params.SubMIPNodes = 1000
     master.update()
     # Store the variables inside the model, we cannot access them later!
     master._variables = master.getVars()
-    # Indicate that we inject the feasible solution to the subproblem intially
+    # Indicate that we inject the feasible solution to the subproblem initially
     master._use_feasible = True
     return master
 
@@ -247,7 +248,7 @@ def callback_data(subproblems, data):
     This is a closure that passes whatever data we want to the actual
     callback function. We have to use this because gurobi callbacks have a
     certain signature (model, where)
-    :param subproblem: Gurobi subproblem models (one per period)
+    :param subproblems: Gurobi subproblem models (one per period)
     :param data:       Problem data
     :return:           master_callback function
 
