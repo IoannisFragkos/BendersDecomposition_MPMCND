@@ -110,7 +110,8 @@ def heuristic_main(data):
         for arc in xrange(arcs):
             if arc_open[arc].x > 0.01:
                 lower_bounds[t, arc] = 1.
-                open_arcs[t, arc] = 1
+                if np.sum(open_arcs[:t, arc]) < 10e-5:
+                    open_arcs[t, arc] = 1
             else:
                 upper_bounds[t, arc] = 0
         alpha -= 1./periods
@@ -251,7 +252,7 @@ def make_local_branching_model(data, kappa, open_arcs):
     """
     Constructs a local branching model that searches a kappa-sized
     neighborhood per period, starting from the feasible solution open_arcs
-    :param data:        Probelm data
+    :param data:        Problem data
     :param kappa:       Local branching neighborhood (per period)
     :param open_arcs:   binary solution that defined the neighborhood
     """
@@ -319,16 +320,20 @@ def make_local_branching_model(data, kappa, open_arcs):
                 arc_open[period, arc] for arc in xrange(arcs) if
                 open_arcs[period, arc] == 0])
         lhs += grb.quicksum([
-                arc_open[period, arc] - 1. for arc in xrange(arcs) if
+                1. - arc_open[period, arc] for arc in xrange(arcs) if
                 open_arcs[period, arc] == 1])
-        model.addConstr(lhs <= kappa, name='loca_branch.{}'.format(period))
+        model.addConstr(lhs <= kappa, name='local_branch.{}'.format(period))
 
     model._capacities = capacities
     model.params.TimeLimit = 100.
+    model.params.NodeLimit = 500
     model.params.Threads = 1
+    model.params.Heuristics = 1.
     model.update()
+    model.write('local.lp')
     model.optimize()
     print 'solutions found: {}'.format(model.SolCount)
+    print 'best objective value: {}'.format(model.objVal)
     n_sols = min(model.SolCount, 10)
     solutions = np.zeros(shape=(n_sols, periods, arcs), dtype=int)
     for sol in xrange(n_sols):
