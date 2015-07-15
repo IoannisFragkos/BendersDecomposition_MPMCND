@@ -44,14 +44,13 @@ def heuristic_main(data):
     else:
         weights[0], weights[1:] = 1, 0.
     fixed_cost = np.average(data.fixed_cost, axis=0, weights=weights)
-    variable_cost = data.variable_cost
     upper_bounds = np.ones(shape=(data.periods, data.arcs.size))
     lower_bounds = np.zeros_like(upper_bounds)
 
     # Store the arcs that are open in the single-shot problem
     open_arcs = np.zeros(shape=(periods, arcs), dtype=int)
 
-    # Take into account the peak demand only intially
+    # Take into account the peak demand only initially
     model = make_model(data, fixed_cost)
     model.optimize()
 
@@ -82,7 +81,7 @@ def heuristic_main(data):
     # With this set of arcs (potential_arcs) solve single-period problems with
     # modified demand (so that it takes into account demand of future periods).
     # Do this to keep the arc opening variables only
-    alpha = 1.
+    alpha = .5
     for t in xrange(periods):
         t_max = min(t+1, data.periods-1)
         fixed_cost = alpha * data.fixed_cost[t, :] + (1 - alpha) * np.average(
@@ -97,7 +96,7 @@ def heuristic_main(data):
             con = model.getConstrByName(con_name)
             if arc_open[arc].varName not in potential_arcs:
                 arc_open[arc].ub = 0.
-            # We dont pay for arcs that are already open
+            # We don't pay for arcs that are already open
             if np.sum(open_arcs[:t, arc], axis=0) > 0.5:
                 arc_open[arc].obj = 0.
             else:
@@ -120,7 +119,6 @@ def heuristic_main(data):
     # initial problem. We can use arcs that opened in previous periods for free
     objective = 0.
     for t in xrange(periods):
-        t_max = min(t+1, data.periods)
         fixed_cost, variable_cost = data.fixed_cost[t, :], data.variable_cost
         demand = data.demand[t, :]
         flow = model._flow
@@ -147,13 +145,12 @@ def heuristic_main(data):
             model.write(str(model.ModelName) + '_{}.ilp'.format(t))
         if model.SolCount > 0:
             objective += model.objVal
-            count = 0.
             # If we use an arc and it has not been opened before, we should
             # mark it as open now, and keep it open all along
-            for var in all_arcs:
+            for count, var in enumerate(all_arcs):
                 if var.X > 0.1:
                     var.lb = 1.
-                    if np.sum(open_arcs[:t_max, count]) < 10e-5:
+                    if np.sum(open_arcs[:t, count]) < 10e-5:
                         open_arcs[t, count] = 1.
             print 'Period : {} Objective value: {}'.format(t, objective)
 
@@ -329,10 +326,10 @@ def make_local_branching_model(data, kappa, open_arcs):
     model._capacities = capacities
     model.params.TimeLimit = 100.
     model.params.NodeLimit = 500
+    model.params.MIPGap = 0.03
     model.params.Threads = 1
     model.params.Heuristics = 1.
     model.update()
-    model.write('local.lp')
     model.optimize()
     print 'solutions found: {}'.format(model.SolCount)
     print 'best objective value: {}'.format(model.objVal)
@@ -366,7 +363,7 @@ def test():
     time_start = time.time()
     global DEBUG
     DEBUG = False
-    filename = 'r01.1_R_H_10.dow' if len(argv) <= 1 else argv[1]
+    filename = 'R_single_period/r01.1_R_H_10.dow' if len(argv) <= 1 else argv[1]
     data = read_data(filename)
     objective, open_arcs = heuristic_main(data)
     make_local_branching_model(data, 1, open_arcs)
