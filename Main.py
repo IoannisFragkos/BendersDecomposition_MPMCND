@@ -52,7 +52,7 @@ def populate_master(data, duals, open_arcs=None):
     master = Model('master-model')
     arcs, periods = xrange(data.arcs.size), xrange(data.periods)
     variables = np.empty(shape=(data.periods, data.arcs.size), dtype=object)
-    continous_variables = np.empty(shape=data.periods, dtype=object)
+    continuous_variables = np.empty(shape=data.periods, dtype=object)
 
     # Add variables
     for period, arc in product(periods, arcs):
@@ -62,7 +62,7 @@ def populate_master(data, duals, open_arcs=None):
                                                    period, arc))
     # Continuous flow_cost variables
     for period in periods:
-        continous_variables[period] = master.addVar(
+        continuous_variables[period] = master.addVar(
             lb=0., obj=1., vtype=GRB.CONTINUOUS, name='flow_cost{}'.format(
                 period))
     master.update()
@@ -186,7 +186,8 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
                     flow_index[node, commodity] = count
                     count += 1
             ubounds_duals[arc, commodity] = dual_subproblem.addVar(
-                obj=-1., name='u_bound_dual_a{}c{}'.format(arc, commodity))
+                obj=-1., name='u_bound_dual_a{}c{}'.format(
+                    arc, commodity))
             ubounds_index[arc, commodity] = count
             count += 1
     opt_var = dual_subproblem.addVar(obj=-flow_cost[0], name='optimality_var')
@@ -205,7 +206,7 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
             lhs <= 0., name='flow_a{}c{}'.format(arc, commodity))
 
     # Original Fischetti model
-    lhs = np.sum(capacity_duals) + opt_var
+    lhs = np.sum(capacity_duals) + opt_var  # + np.sum(ubounds_duals)
     dual_subproblem.addConstr(lhs == 1, name='normalization_constraint')
 
     dual_subproblem._capacity_index = capacity_index
@@ -215,8 +216,8 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
     dual_subproblem.setParam('OutputFlag', 0)
     # Switch on the additional parameters that calculate dual values when
     # then dual problem is unbounded
-    dual_subproblem.setParam('PreSolve', 0)
-    dual_subproblem.setParam('InfUnbdInfo', 1)
+    # dual_subproblem.setParam('PreSolve', 0)
+    # dual_subproblem.setParam('InfUnbdInfo', 1)
     dual_subproblem.modelSense = GRB.MAXIMIZE
     dual_subproblem.update()
 
@@ -233,6 +234,9 @@ def populate_dual_subproblem(data, open_arcs, flow_cost=None):
                                                              :period + 1, arc])
                 for commodity in commodities:
                     demand = data.demand[period, commodity]
+                    # var = model.getVarByName('u_bound_dual_a{}c{}'.format(
+                    #     arc, commodity))
+                    # var.obj = - open_arcs[period, arc]
                     constraint = model.getConstrByName(
                         'flow_a{}c{}'.format(arc, commodity))
                     model.chgCoeff(constraint, optimality_var,
@@ -276,9 +280,7 @@ def callback_data(subproblems, data):
         if flow_cost is None:
             flow_cost = np.zeros(shape=data.periods, dtype=float)
 
-        # We loop backwards because for capacity duals we need to store their
-        #  sum from each period to the last period
-        for period in reversed(periods):
+        for period in periods:
             subproblem = subproblems[period]
             all_variables = subproblem.getVars()
             optimality_var = all_variables[-1]
@@ -293,6 +295,9 @@ def callback_data(subproblems, data):
                     cap = data.capacity[arc]
                     coeff = -cap * np.sum(open_arcs[:period+1, arc])
                     var.setAttr('Obj', coeff)
+                    # for c in commodities:
+                    #     var = ubound_duals[arc, c]
+                    #     var.setAttr('Obj', -open_arcs[period, arc])
 
             optimality_var.setAttr('Obj', -flow_cost[period])
 
@@ -314,7 +319,7 @@ def callback_data(subproblems, data):
                 # Here are the cut coefficients
                 duals = Subproblem_Duals(
                     flow_duals=flow_duals_vals,
-                    capacity_duals=capacity_duals_vals.copy(),
+                    capacity_duals=capacity_duals_vals,
                     bounds_duals=ubound_duals_vals,
                     optimality_dual=optimality_var.X)
                 duals_arr[period] = duals
@@ -410,6 +415,7 @@ def populate_benders_cut(duals, variables, period, data):
     lhs = LinExpr()
     for arc in arcs:
         y_coeff = - data.capacity[arc] * capacity_duals[arc]
+        # y_coeff -= np.sum(ubound_duals[arc, :])
         for period2 in xrange(0, period+1):
             if abs(y_coeff) > 10e-6:
                 lhs.addTerms(y_coeff, variables[period2 * data.arcs.size + arc])

@@ -81,7 +81,7 @@ def heuristic_main(data):
     # With this set of arcs (potential_arcs) solve single-period problems with
     # modified demand (so that it takes into account demand of future periods).
     # Do this to keep the arc opening variables only
-    alpha = .5
+    alpha = 1.
     for t in xrange(periods):
         t_max = min(t+1, data.periods-1)
         fixed_cost = alpha * data.fixed_cost[t, :] + (1 - alpha) * np.average(
@@ -212,7 +212,7 @@ def make_model(data, fixed_cost):
                     name='demand_n{}c{}'.format(n, h))
 
     model._capacities = capacities
-    model.params.OutputFlag = 0
+    model.setParam('OutputFlag', 0)
     model.params.BarConvTol = .1
     model.params.NodeLimit = 300
     model.params.TimeLimit = 100.
@@ -324,6 +324,7 @@ def make_local_branching_model(data, kappa, open_arcs):
         model.addConstr(lhs <= kappa, name='local_branch.{}'.format(period))
 
     model._capacities = capacities
+    model.setParam('OutputFlag', 0)
     model.params.TimeLimit = 100.
     model.params.NodeLimit = 500
     model.params.MIPGap = 0.03
@@ -332,7 +333,7 @@ def make_local_branching_model(data, kappa, open_arcs):
     model.update()
     model.optimize()
     print 'solutions found: {}'.format(model.SolCount)
-    print 'best objective value: {}'.format(model.objVal)
+    # print 'best objective value: {}'.format(model.objVal)
     n_sols = min(model.SolCount, 10)
     solutions = np.zeros(shape=(n_sols, periods, arcs), dtype=int)
     for sol in xrange(n_sols):
@@ -343,7 +344,6 @@ def make_local_branching_model(data, kappa, open_arcs):
                 if arc_open[period, arc].Xn > 0:
                     solutions[sol, period, arc] = 1
                     # print 'Period: {} Arc: {}'.format(period, arc)
-        print ''
 
     return model.ObjVal, solutions[0]
 
@@ -366,7 +366,8 @@ def test():
     filename = 'R_single_period/r01.1_R_H_10.dow' if len(argv) <= 1 else argv[1]
     data = read_data(filename)
     objective, open_arcs = heuristic_main(data)
-    make_local_branching_model(data, 1, open_arcs)
+    objective, open_arcs = make_local_branching_model(data, 2, open_arcs)
+    print 'objective: {}'.format(objective)
     time_finish = time.time()
     print 'Total time: {} s'.format(time_finish - time_start)
 
